@@ -42,7 +42,7 @@ jobs:
 ## Usage
 
 ```
-go install github.com/krishicks/concourse-pipeline-steamroller/cmd/steamroll
+go get github.com/krishicks/concourse-pipeline-steamroller/cmd/steamroll
 
 cat > config.yml <<EOF
   resource_map:
