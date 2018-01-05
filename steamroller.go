@@ -120,6 +120,10 @@ func loadBytes(resourceMap map[string]string, path string) ([]byte, error) {
 		return nil, fmt.Errorf("no resource map provided for %s", path)
 	}
 
+	if strings.HasPrefix(resourcePath, "~") {
+		resourcePath = filepath.Join(os.Getenv("HOME"), resourcePath[2:])
+	}
+
 	actualPath := filepath.Join(resourcePath, strings.Replace(path, resourceRoot, "", -1))
 
 	return ioutil.ReadFile(actualPath)
