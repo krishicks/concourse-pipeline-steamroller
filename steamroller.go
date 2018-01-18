@@ -80,30 +80,33 @@ func flattenPlanConfig(files map[string]string, jobPlan []atc.PlanConfig) {
 				step.TaskConfigPath = ""
 
 				path := step.TaskConfig.Run.Path
-				scriptBytes, err := loadBytes(files, path)
-				if err != nil {
-					log.Fatalf("failed to read task config at %s: %s", path, err)
-				}
 
-				interpreter := interpreters[filepath.Ext(path)]
-
-				step.TaskConfig.Run.Path = interpreter.Path
-
-				if interpreter.Template != "" {
-					script := Script{
-						Contents: string(scriptBytes),
-					}
-
-					buf := &bytes.Buffer{}
-					tmpl := template.Must(template.New("run").Parse(interpreter.Template))
-					err = tmpl.Execute(buf, script)
+				if strings.Contains(path, "/") {
+					scriptBytes, err := loadBytes(files, path)
 					if err != nil {
-						log.Fatalf("failed to execute template: %s", err)
+						log.Fatalf("failed to read task config at %s: %s", path, err)
 					}
 
-					step.TaskConfig.Run.Args = append(interpreter.Args, buf.String())
-				} else {
-					step.TaskConfig.Run.Args = append(interpreter.Args, string(scriptBytes))
+					interpreter := interpreters[filepath.Ext(path)]
+
+					step.TaskConfig.Run.Path = interpreter.Path
+
+					if interpreter.Template != "" {
+						script := Script{
+							Contents: string(scriptBytes),
+						}
+
+						buf := &bytes.Buffer{}
+						tmpl := template.Must(template.New("run").Parse(interpreter.Template))
+						err = tmpl.Execute(buf, script)
+						if err != nil {
+							log.Fatalf("failed to execute template: %s", err)
+						}
+
+						step.TaskConfig.Run.Args = append(interpreter.Args, buf.String())
+					} else {
+						step.TaskConfig.Run.Args = append(interpreter.Args, string(scriptBytes))
+					}
 				}
 			}
 
