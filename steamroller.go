@@ -152,15 +152,14 @@ func findFiles(data interface{}) (map[string]struct{}, error) {
 					files[pathStr] = struct{}{}
 				}
 			}
-		} else {
-			for _, v := range i1 {
-				newFiles, err := findFiles(v)
-				if err != nil {
-					log.Fatalf("failed to find files: %s", err)
-				}
-				for k := range newFiles {
-					files[k] = struct{}{}
-				}
+		}
+		for _, v := range i1 {
+			newFiles, err := findFiles(v)
+			if err != nil {
+				log.Fatalf("failed to find files: %s", err)
+			}
+			for k := range newFiles {
+				files[k] = struct{}{}
 			}
 		}
 	case []interface{}:
@@ -189,15 +188,14 @@ func findRunPaths(data interface{}) (map[string]struct{}, error) {
 					files[pathStr] = struct{}{}
 				}
 			}
-		} else {
-			for _, v := range i1 {
-				newFiles, err := findRunPaths(v)
-				if err != nil {
-					log.Fatalf("failed to find files: %s", err)
-				}
-				for k := range newFiles {
-					files[k] = struct{}{}
-				}
+		}
+		for _, v := range i1 {
+			newFiles, err := findRunPaths(v)
+			if err != nil {
+				log.Fatalf("failed to find files: %s", err)
+			}
+			for k := range newFiles {
+				files[k] = struct{}{}
 			}
 		}
 	case []interface{}:
