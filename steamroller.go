@@ -51,6 +51,10 @@ func Steamroll(filemap map[string]string, pipelineBytes []byte) ([]byte, error) 
 
 	var patch yamlpatch.Patch
 	for file, _ := range files {
+		if !resourceIsMapped(filemap, file) {
+			continue
+		}
+
 		bs, err := loadBytes(filemap, file)
 		if err != nil {
 			log.Fatalf("failed to load yml bytes: %s", err)
@@ -95,6 +99,10 @@ func Steamroll(filemap map[string]string, pipelineBytes []byte) ([]byte, error) 
 	}
 
 	for file, _ := range files {
+		if !resourceIsMapped(filemap, file) {
+			continue
+		}
+
 		bs, err := loadBytes(filemap, file)
 		if err != nil {
 			log.Fatalf("failed to load sh bytes: %s", err)
@@ -205,6 +213,12 @@ func findRunPaths(data interface{}) (map[string]struct{}, error) {
 	}
 
 	return files, nil
+}
+
+func resourceIsMapped(resourceMap map[string]string, path string) bool {
+	resourceRoot := strings.Split(path, string(os.PathSeparator))[0]
+	_, ok := resourceMap[resourceRoot]
+	return ok
 }
 
 func loadBytes(resourceMap map[string]string, path string) ([]byte, error) {
