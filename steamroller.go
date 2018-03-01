@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/concourse/atc"
+	yamlpatch "github.com/krishicks/yaml-patch"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -37,82 +37,174 @@ type Config struct {
 	ResourceMap map[string]string `yaml:"resource_map"`
 }
 
-func Steamroll(files map[string]string, atcConfig atc.Config) (*atc.Config, error) {
-	newConfig := atcConfig
-
-	for i := range atcConfig.Jobs {
-		newPlan := atcConfig.Jobs[i].Plan
-		flattenPlanConfig(files, newPlan)
-
-		newConfig.Jobs[i].Plan = newPlan
+func Steamroll(filemap map[string]string, pipelineBytes []byte) ([]byte, error) {
+	var pipeline map[string]interface{}
+	err := yaml.Unmarshal(pipelineBytes, &pipeline)
+	if err != nil {
+		log.Fatalf("failed to unmarshal pipeline: %s", err)
 	}
 
-	return &newConfig, nil
-}
+	files, err := findFiles(pipeline["jobs"])
+	if err != nil {
+		log.Fatalf("failed to find files: %s", err)
+	}
 
-func flattenPlanConfig(files map[string]string, jobPlan []atc.PlanConfig) {
-	for i, step := range jobPlan {
-		switch {
-		case step.Aggregate != nil:
-			flattenPlanConfig(files, []atc.PlanConfig(*step.Aggregate))
+	var patch yamlpatch.Patch
+	for file, _ := range files {
+		bs, err := loadBytes(filemap, file)
+		if err != nil {
+			log.Fatalf("failed to load yml bytes: %s", err)
+		}
 
-		case step.Do != nil:
-			flattenPlanConfig(files, []atc.PlanConfig(*step.Do))
+		var bi map[interface{}]interface{}
+		err = yaml.Unmarshal(bs, &bi)
+		if err != nil {
+			log.Fatalf("failed to unmarshal: %s", err)
+		}
 
-		case step.Task != "":
-			if step.TaskConfigPath != "" {
-				if files == nil {
-					log.Fatalf("empty resource map; cannot find %s", step.TaskConfigPath)
-				}
+		patch = append(patch, yamlpatch.Operation{
+			Op:    yamlpatch.OpAdd,
+			Path:  yamlpatch.OpPath(fmt.Sprintf("/jobs/file=%s/config", strings.Replace(file, "/", "~1", -1))),
+			Value: yamlpatch.NewNodeFromMap(bi),
+		})
+		patch = append(patch, yamlpatch.Operation{
+			Op:   yamlpatch.OpRemove,
+			Path: yamlpatch.OpPath(fmt.Sprintf("/jobs/file=%s/file", strings.Replace(file, "/", "~1", -1))),
+		})
+	}
 
-				taskConfigBytes, err := loadBytes(files, step.TaskConfigPath)
-				if err != nil {
-					log.Fatalf("failed to read task config at %s: %s", step.TaskConfigPath, err)
-				}
+	bs, err := patch.Apply(pipelineBytes)
+	if err != nil {
+		log.Fatalf("failed to apply patch: %s", err)
+	}
 
-				var taskConfig atc.TaskConfig
-				err = yaml.Unmarshal(taskConfigBytes, &taskConfig)
-				if err != nil {
-					log.Fatalf("failed to unmarshal task config at %s: %s", step.TaskConfigPath, err)
-				}
+	patch = nil
+	pipeline = map[string]interface{}{}
+	err = yaml.Unmarshal(bs, &pipeline)
+	if err != nil {
+		log.Fatalf("failed to unmarshal pipeline: %s", err)
+	}
 
-				step.TaskConfig = &taskConfig
-				step.TaskConfigPath = ""
+	files, err = findRunPaths(pipeline["jobs"])
+	if err != nil {
+		log.Fatalf("failed to find files: %s", err)
+	}
 
-				path := step.TaskConfig.Run.Path
+	if len(files) == 0 {
+		log.Fatal("no files")
+	}
 
-				if strings.Contains(path, "/") {
-					scriptBytes, err := loadBytes(files, path)
-					if err != nil {
-						log.Fatalf("failed to read task config at %s: %s", path, err)
-					}
+	for file, _ := range files {
+		bs, err := loadBytes(filemap, file)
+		if err != nil {
+			log.Fatalf("failed to load sh bytes: %s", err)
+		}
 
-					interpreter := interpreters[filepath.Ext(path)]
+		interpreter := interpreters[filepath.Ext(file)]
 
-					step.TaskConfig.Run.Path = interpreter.Path
-
-					if interpreter.Template != "" {
-						script := Script{
-							Contents: string(scriptBytes),
-						}
-
-						buf := &bytes.Buffer{}
-						tmpl := template.Must(template.New("run").Parse(interpreter.Template))
-						err = tmpl.Execute(buf, script)
-						if err != nil {
-							log.Fatalf("failed to execute template: %s", err)
-						}
-
-						step.TaskConfig.Run.Args = append(interpreter.Args, buf.String())
-					} else {
-						step.TaskConfig.Run.Args = append(interpreter.Args, string(scriptBytes))
-					}
-				}
+		var script string
+		if interpreter.Template != "" {
+			s := Script{
+				Contents: string(bs),
 			}
 
-			jobPlan[i] = step
+			buf := &bytes.Buffer{}
+			tmpl := template.Must(template.New("run").Parse(interpreter.Template))
+			err = tmpl.Execute(buf, s)
+			if err != nil {
+				log.Fatalf("failed to execute template: %s", err)
+			}
+
+			script = buf.String()
+		} else {
+			script = string(bs)
+		}
+
+		patch = append(patch, yamlpatch.Operation{
+			Op:   yamlpatch.OpReplace,
+			Path: yamlpatch.OpPath(fmt.Sprintf("/jobs/path=%s", strings.Replace(file, "/", "~1", -1))),
+			Value: yamlpatch.NewNodeFromMap(map[interface{}]interface{}{
+				"path": interpreter.Path,
+				"args": []interface{}{"-c", script},
+			}),
+		})
+	}
+
+	return patch.Apply(bs)
+}
+
+func findFiles(data interface{}) (map[string]struct{}, error) {
+	files := map[string]struct{}{}
+
+	switch i1 := data.(type) {
+	case map[interface{}]interface{}:
+		if _, hasTask := i1["task"]; hasTask {
+			if path, hasFile := i1["file"]; hasFile {
+				if pathStr, ok := path.(string); ok {
+					files[pathStr] = struct{}{}
+				}
+			}
+		} else {
+			for _, v := range i1 {
+				newFiles, err := findFiles(v)
+				if err != nil {
+					log.Fatalf("failed to find files: %s", err)
+				}
+				for k := range newFiles {
+					files[k] = struct{}{}
+				}
+			}
+		}
+	case []interface{}:
+		for _, v := range i1 {
+			newFiles, err := findFiles(v)
+			if err != nil {
+				log.Fatalf("failed to find files: %s", err)
+			}
+			for k := range newFiles {
+				files[k] = struct{}{}
+			}
 		}
 	}
+
+	return files, nil
+}
+
+func findRunPaths(data interface{}) (map[string]struct{}, error) {
+	files := map[string]struct{}{}
+
+	switch i1 := data.(type) {
+	case map[interface{}]interface{}:
+		if iface, hasRun := i1["run"]; hasRun {
+			if path, hasPath := iface.(map[interface{}]interface{})["path"]; hasPath {
+				if pathStr, ok := path.(string); ok {
+					files[pathStr] = struct{}{}
+				}
+			}
+		} else {
+			for _, v := range i1 {
+				newFiles, err := findRunPaths(v)
+				if err != nil {
+					log.Fatalf("failed to find files: %s", err)
+				}
+				for k := range newFiles {
+					files[k] = struct{}{}
+				}
+			}
+		}
+	case []interface{}:
+		for _, v := range i1 {
+			newFiles, err := findRunPaths(v)
+			if err != nil {
+				log.Fatalf("failed to find files: %s", err)
+			}
+			for k := range newFiles {
+				files[k] = struct{}{}
+			}
+		}
+	}
+
+	return files, nil
 }
 
 func loadBytes(resourceMap map[string]string, path string) ([]byte, error) {

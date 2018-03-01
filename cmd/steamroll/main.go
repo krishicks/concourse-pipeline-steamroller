@@ -6,10 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/concourse/atc"
 	"github.com/jessevdk/go-flags"
 	steamroller "github.com/krishicks/concourse-pipeline-steamroller"
-	yamlpatch "github.com/krishicks/yaml-patch"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -43,30 +41,14 @@ func main() {
 		log.Fatalf("failed reading path: %s", err)
 	}
 
-	placeholderWrapper := yamlpatch.NewPlaceholderWrapper("{{", "}}")
-	wrappedConfigBytes := placeholderWrapper.Wrap(pipelineBytes)
-
-	var atcConfig atc.Config
-	err = yaml.Unmarshal(wrappedConfigBytes, &atcConfig)
-	if err != nil {
-		log.Fatalf("failed unmarshaling config: %s", err)
-	}
-
-	steamrolledConfig, err := steamroller.Steamroll(config.ResourceMap, atcConfig)
+	bs, err := steamroller.Steamroll(config.ResourceMap, pipelineBytes)
 	if err != nil {
 		log.Fatalf("failed steamrolling config: %s", err)
 	}
-
-	bs, err := yaml.Marshal(steamrolledConfig)
-	if err != nil {
-		log.Fatalf("failed steamrolling config: %s", err)
-	}
-
-	unwrappedConfigBytes := placeholderWrapper.Unwrap(bs)
 
 	f := bufio.NewWriter(os.Stdout)
 
-	_, err = f.Write(unwrappedConfigBytes)
+	_, err = f.Write(bs)
 	if err != nil {
 		log.Fatalf("failed to write steamrolled pipeline to stdout")
 	}
