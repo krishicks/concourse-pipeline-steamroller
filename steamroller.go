@@ -94,10 +94,6 @@ func Steamroll(filemap map[string]string, pipelineBytes []byte) ([]byte, error) 
 		log.Fatalf("failed to find files: %s", err)
 	}
 
-	if len(files) == 0 {
-		log.Fatal("no files")
-	}
-
 	for file, _ := range files {
 		if !resourceIsMapped(filemap, file) {
 			continue
@@ -138,7 +134,11 @@ func Steamroll(filemap map[string]string, pipelineBytes []byte) ([]byte, error) 
 		})
 	}
 
-	return patch.Apply(bs)
+	if patch != nil {
+		return patch.Apply(bs)
+	}
+
+	return bs, nil
 }
 
 func findFiles(data interface{}) (map[string]struct{}, error) {
