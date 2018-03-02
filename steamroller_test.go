@@ -15,6 +15,7 @@ var _ = Describe("Steamroller", func() {
 	It("is a no-op when there's nothing to inline", func() {
 		pipelineBytes := []byte(`jobs: []`)
 		actualBytes, err := steamroller.Steamroll(nil, pipelineBytes)
+		Expect(err).NotTo(HaveOccurred())
 
 		var actual map[interface{}]interface{}
 		err = yaml.Unmarshal(actualBytes, &actual)
@@ -103,6 +104,7 @@ jobs:
 			scriptFilePath := filepath.Join(tmpdir, "some-script.sh")
 			err = ioutil.WriteFile(scriptFilePath, []byte(`#!/bin/bash
 echo hi`), os.ModePerm)
+			Expect(err).NotTo(HaveOccurred())
 
 			taskFilePath := filepath.Join(tmpdir, "some-task")
 			err = ioutil.WriteFile(taskFilePath, []byte(`---

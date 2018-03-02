@@ -50,7 +50,7 @@ func Steamroll(filemap map[string]string, pipelineBytes []byte) ([]byte, error) 
 	}
 
 	var patch yamlpatch.Patch
-	for file, _ := range files {
+	for file := range files {
 		if !resourceIsMapped(filemap, file) {
 			continue
 		}
@@ -94,7 +94,7 @@ func Steamroll(filemap map[string]string, pipelineBytes []byte) ([]byte, error) 
 		log.Fatalf("failed to find files: %s", err)
 	}
 
-	for file, _ := range files {
+	for file := range files {
 		if !resourceIsMapped(filemap, file) {
 			continue
 		}
@@ -108,7 +108,7 @@ func Steamroll(filemap map[string]string, pipelineBytes []byte) ([]byte, error) 
 
 		var script string
 		if interpreter.Template != "" {
-			s := Script{
+			s := inlineScript{
 				Contents: string(bs),
 			}
 
@@ -236,7 +236,7 @@ func loadBytes(resourceMap map[string]string, path string) ([]byte, error) {
 	return ioutil.ReadFile(actualPath)
 }
 
-type Script struct {
+type inlineScript struct {
 	Contents string
 }
 
