@@ -12,8 +12,8 @@ import (
 )
 
 type opts struct {
-	PipelinePath FileFlag `long:"pipeline" short:"p" value-name:"PATH" description:"Path to pipeline"`
-	ConfigPath   FileFlag `long:"config" short:"c" value-name:"PATH" description:"Path to config"`
+	PipelinePath   FileFlag `long:"pipeline" short:"p" value-name:"PATH" description:"Path to pipeline" required:"true"`
+	ConfigPath     FileFlag `long:"config" short:"c" value-name:"PATH" description:"Path to config"`
 }
 
 func main() {
