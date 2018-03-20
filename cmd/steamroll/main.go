@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/jessevdk/go-flags"
 	steamroller "github.com/krishicks/concourse-pipeline-steamroller"
@@ -14,6 +15,7 @@ import (
 type opts struct {
 	PipelinePath   FileFlag `long:"pipeline" short:"p" value-name:"PATH" description:"Path to pipeline" required:"true"`
 	ConfigPath     FileFlag `long:"config" short:"c" value-name:"PATH" description:"Path to config"`
+	ResourceConfig []string `long:"resource-config" value-name:"key=value" description:"resource key/value map"`
 }
 
 func main() {
@@ -24,6 +26,8 @@ func main() {
 	}
 
 	var config steamroller.Config
+	config.ResourceMap = map[string]string{}
+
 	if o.ConfigPath.Path() != "" {
 		var configBytes []byte
 		configBytes, err = ioutil.ReadFile(o.ConfigPath.Path())
@@ -34,6 +38,11 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed unmarshaling config file: %s", err)
 		}
+	}
+
+	for _, resourceConfig := range o.ResourceConfig {
+		rp := strings.Split(resourceConfig, "=")
+		config.ResourceMap[rp[0]] = rp[1]
 	}
 
 	pipelineBytes, err := ioutil.ReadFile(o.PipelinePath.Path())
