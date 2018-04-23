@@ -124,12 +124,16 @@ func Steamroll(filemap map[string]string, pipelineBytes []byte) ([]byte, error) 
 			script = string(bs)
 		}
 
+		args := []string{}
+		args = append(args, interpreter.Args...)
+		args = append(args, script)
+
 		patch = append(patch, yamlpatch.Operation{
 			Op:   yamlpatch.OpReplace,
 			Path: yamlpatch.OpPath(fmt.Sprintf("/jobs/path=%s", strings.Replace(file, "/", "~1", -1))),
 			Value: yamlpatch.NewNodeFromMap(map[interface{}]interface{}{
 				"path": interpreter.Path,
-				"args": []interface{}{"-c", script},
+				"args": args,
 			}),
 		})
 	}
